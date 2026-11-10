@@ -1,6 +1,9 @@
 package ru.ainas.app.net
 
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.sftp.OpenMode
@@ -210,20 +213,22 @@ class SftpProvider(
     }
 
     override fun close() {
-        try {
-            sftp?.close()
-        } catch (_: IOException) {
-        }
-        try {
-            ssh?.disconnect()
-        } catch (_: IOException) {
-        }
+        val s = sftp
+        val h = ssh
         sftp = null
         ssh = null
+        if (s == null && h == null) return
+        // close() вызывается из onDispose в UI-потоке: sshj при закрытии шлёт пакеты по сети,
+        // что приводит к NetworkOnMainThreadException. Закрываем в фоне, ошибки игнорируем.
+        closerScope.launch {
+            runCatching { s?.close() }
+            runCatching { h?.disconnect() }
+        }
     }
 
     companion object {
         const val DEFAULT_PORT: Int = 22
         private const val CHUNK: Int = 64 * 1024
+        private val closerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     }
 }

@@ -106,18 +106,24 @@ fun FilesScreen(
     val downloadsDir = remember { File(context.filesDir, "Downloads").also { it.mkdirs() } }
 
     val storage: Storage = remember(sourceIndex, auth.host, auth.user, auth.pass, settings.smbShare) {
-        when (sourceIndex) {
-            0 -> SftpProvider(
-                auth.host, SftpProvider.DEFAULT_PORT, auth.user, auth.pass,
-                altHost = auth.homeHost.takeIf { !ru.ainas.app.auth.NasEndpoints.isLocalHost(auth.host) },
-            )
-            1 -> SmbProvider(auth.smbHost(), settings.smbShare, auth.user, auth.pass)
-            2 -> WebDavProvider(
-                baseUrl = "https://" + auth.host + "/remote.php/dav/files/" + auth.user + "/",
-                user = auth.user,
-                password = auth.pass,
-            )
-            else -> LocalProvider()
+        // Конструктор провайдера выполняется в композиции: любая ошибка сборки клиента
+        // (jcifs/sshj/OkHttp) не должна ронять приложение — показываем её как текст ошибки.
+        try {
+            when (sourceIndex) {
+                0 -> SftpProvider(
+                    auth.host, SftpProvider.DEFAULT_PORT, auth.user, auth.pass,
+                    altHost = auth.homeHost.takeIf { !ru.ainas.app.auth.NasEndpoints.isLocalHost(auth.host) },
+                )
+                1 -> SmbProvider(auth.smbHost(), settings.smbShare, auth.user, auth.pass)
+                2 -> WebDavProvider(
+                    baseUrl = "https://" + auth.host + "/remote.php/dav/files/" + auth.user + "/",
+                    user = auth.user,
+                    password = auth.pass,
+                )
+                else -> LocalProvider()
+            }
+        } catch (e: Throwable) {
+            ErrorStorage(e.message ?: e.toString())
         }
     }
     DisposableEffect(storage) {
@@ -504,4 +510,20 @@ fun FilesScreen(
             },
         )
     }
+}
+
+/**
+ * Провайдер-заглушка: создаётся, когда конструктор настоящего провайдера упал.
+ * Любое обращение возвращает понятную ошибку в UI вместо крэша композиции.
+ */
+private class ErrorStorage(private val message: String) : Storage {
+    override suspend fun list(path: String): List<StorageListEntry> = throw java.io.IOException(message)
+    override suspend fun download(remotePath: String, target: File, onProgress: (Long, Long) -> Unit) =
+        throw java.io.IOException(message)
+    override suspend fun upload(local: File, remotePath: String, onProgress: (Long, Long) -> Unit) =
+        throw java.io.IOException(message)
+    override suspend fun mkdir(path: String) = throw java.io.IOException(message)
+    override suspend fun rename(path: String, newName: String) = throw java.io.IOException(message)
+    override suspend fun delete(path: String) = throw java.io.IOException(message)
+    override fun close() {}
 }

@@ -13,8 +13,8 @@ android {
         applicationId = "ru.ai.nas"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.2.0"
+        versionCode = 4
+        versionName = "1.2.1"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -85,9 +85,13 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
+    // jcifs-ng логирует через slf4j: simple-байндинг пишет в stderr (виден в logcat)
+    implementation("org.slf4j:slf4j-simple:2.0.9")
+
     // --- Протоколы хранилищ ---
     implementation("org.codelibs:jcifs:2.1.7") // jcifs-ng: SMB2/3 (официальная координата Maven Central)
-    implementation("com.github.lookfirst:sardine:5.10") // WebDAV
+    // WebDAV реализован напрямую на OkHttp (net/WebDavProvider.kt) — sardine/HttpClient
+    // на Android 9+ не работает (AllowAllHostnameVerifier.INSTANCE удалён)
     implementation("com.hierynomus:sshj:0.38.0") // SSSH/SFTP
     implementation("org.bouncycastle:bcprov-jdk18on:1.78.1") // полный BC: X25519 и др. для sshj
     implementation("org.bouncycastle:bcpkix-jdk18on:1.78.1") // провайдер BC для sshj

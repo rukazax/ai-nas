@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -36,15 +35,17 @@ import ru.ainas.app.auth.AuthState
 import ru.ainas.app.auth.AuthStore
 import ru.ainas.app.settings.AppSettings
 import ru.ainas.app.settings.SettingsStore
-import ru.ainas.app.settings.ThemeMode
 import kotlin.math.abs
-import androidx.compose.ui.graphics.Color
 
 /**
  * Корень приложения:
  * - нет аккаунта -> LandingScreen;
  * - есть -> один HorizontalPager из 5 страниц по кругу:
  *   Дашборд → Файлы → DSH → ubuntu → Настройки → (снова Дашборд).
+ *
+ * Тему применяет MainActivity (читает настройки) — здесь только фон корня:
+ * Surface сверху перекрашивает всё окно, иначе в тёмной теме видны светлые
+ * вспышки системного windowBackground (например, «Ищем фото и видео…»).
  */
 @Composable
 fun AppRoot() {
@@ -54,12 +55,11 @@ fun AppRoot() {
     val settings by remember(context) { SettingsStore.flow(context) }
         .collectAsStateWithLifecycle(initialValue = AppSettings())
 
-    val dark = when (settings.themeMode) {
-        ThemeMode.SYSTEM -> isSystemInDarkTheme()
-        ThemeMode.LIGHT -> false
-        ThemeMode.DARK -> true
-    }
-    AiNasTheme(dark = dark) {
+    val background = MaterialTheme.colorScheme.background
+    androidx.compose.material3.Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = background,
+    ) {
         if (auth == null) {
             LandingScreen()
         } else {
@@ -78,6 +78,12 @@ private fun HomePager(auth: AuthState, settings: AppSettings) {
     val scope = rememberCoroutineScope()
     val publicHost = settings.publicHost.takeIf { it.isNotBlank() }
 
+    fun goTo(page: Int) {
+        scope.launch {
+            runCatching { pagerState.animateScrollToPage(page) }
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         HorizontalPager(
             state = pagerState,
@@ -89,7 +95,7 @@ private fun HomePager(auth: AuthState, settings: AppSettings) {
                 1 -> FilesScreen(
                     auth = auth,
                     settings = settings,
-                    onBackToDashboard = { scope.launch { pagerState.animateScrollToPage(0) } },
+                    onBackToDashboard = { goTo(0) },
                 )
                 2 -> DshScreen(
                     auth = auth,
@@ -105,28 +111,18 @@ private fun HomePager(auth: AuthState, settings: AppSettings) {
             }
         }
 
-        PageDots(currentPage = pagerState.currentPage, modifier = Modifier.align(Alignment.TopCenter))
+        PageDots(currentPage = pagerState.currentPage, modifier = Modifier.align(Alignment.BottomCenter))
 
-        // Циклические свайпы: с 1-й страницы вправо — на последнюю, с последней влево — на первую.
-        if (pagerState.currentPage == 0) {
-            WrapStrip(
-                isLeft = true,
-                onWrap = { scope.launch { pagerState.animateScrollToPage(4) } },
-                modifier = Modifier.align(Alignment.CenterStart),
-            )
-        }
-        if (pagerState.currentPage == 4) {
-            WrapStrip(
-                isLeft = false,
-                onWrap = { scope.launch { pagerState.animateScrollToPage(0) } },
-                modifier = Modifier.align(Alignment.CenterEnd),
-            )
-        }
+        // Свайп по кромке на ЛЮБОЙ странице: WebView-страницы (Дашборд/DSH/ubuntu)
+        // съедают горизонтальные жесты, кромки шириной 34dp обеспечивают
+        // предсказуемое перелистывание. По кругу: 0→4 и 4→0.
+        WrapStrip(isNext = true, onWrap = { goTo(if (pagerState.currentPage + 1 > 4) 0 else pagerState.currentPage + 1) }, modifier = Modifier.align(Alignment.CenterEnd))
+        WrapStrip(isNext = false, onWrap = { goTo(if (pagerState.currentPage - 1 < 0) 4 else pagerState.currentPage - 1) }, modifier = Modifier.align(Alignment.CenterStart))
     }
 
     // Системный «назад»: шаг влево по страницам; страница Файлов управляет собой сама.
     BackHandler(enabled = pagerState.currentPage > 0 && pagerState.currentPage != 1) {
-        scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
+        goTo(pagerState.currentPage - 1)
     }
 }
 
@@ -134,10 +130,10 @@ private fun HomePager(auth: AuthState, settings: AppSettings) {
 @Composable
 private fun PageDots(currentPage: Int, modifier: Modifier = Modifier) {
     val active = MaterialTheme.colorScheme.primary
-    val idle = Color.White.copy(alpha = 0.55f)
+    val idle = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
     Row(
         modifier = modifier
-            .padding(top = 10.dp),
+            .padding(bottom = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         repeat(5) { index ->
@@ -151,36 +147,42 @@ private fun PageDots(currentPage: Int, modifier: Modifier = Modifier) {
 }
 
 /**
- * Невидимая кромка (32dp) для цикла: свайп от левого края вправо на первой
- * странице — к последней; свайп от правого края влево на последней — к первой.
+ * Невидимая кромка (34dp) для перелистывания: свайп от правого края влево — на
+ * следующую страницу, свайп от левого края вправо — на предыдущую (по кругу).
+ * [isNext] = полоса на правой кромке. Вертикальные жесты не перехватываются.
  */
 @Composable
 private fun WrapStrip(
-    isLeft: Boolean,
+    isNext: Boolean,
     onWrap: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier
             .fillMaxHeight()
-            .width(32.dp)
-            .pointerInput(isLeft) {
+            .width(34.dp)
+            .pointerInput(isNext) {
                 awaitEachGesture {
                     val down = awaitDown()
                     val pointerId = down.id
                     var lastX = down.position.x
-                    var traveled = 0f
+                    var lastY = down.position.y
+                    var traveledX = 0f
+                    var traveledY = 0f
                     var settled = false
                     while (!settled) {
                         val event = awaitPointerEvent()
                         val change = event.changes.firstOrNull { it.id == pointerId } ?: break
-                        val x = change.position.x
-                        traveled += x - lastX
-                        lastX = x
-                        val wrap = if (isLeft) traveled > 48f else traveled < -48f
-                        if (abs(traveled) > 48f) {
-                            if (wrap) onWrap()
+                        traveledX += change.position.x - lastX
+                        traveledY += change.position.y - lastY
+                        lastX = change.position.x
+                        lastY = change.position.y
+                        if (abs(traveledX) > 48f && abs(traveledX) > abs(traveledY)) {
+                            val forward = if (isNext) traveledX < 0f else traveledX > 0f
+                            if (forward) onWrap()
                             settled = true
+                        } else if (abs(traveledY) > 48f && abs(traveledY) > abs(traveledX)) {
+                            settled = true // вертикальный скролл контента — уходим
                         }
                         if (change.changedToUp()) {
                             settled = true

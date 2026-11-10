@@ -25,14 +25,24 @@ class SmbProvider(
 
     private val serverRoot = "smb://" + host.trim() + "/" + share.trim() + "/"
 
-    private val ctx: CIFSContext
-
-    init {
+    // ВАЖНО: BaseContext создаётся лениво — его конструктор читает /etc/hosts и делает
+    // DNS/NetBIOS-запрос (NameServiceClient.initCache), что даёт NetworkOnMainThreadException,
+    // если вызвать его во время композиции. Все вызовы list/download/... идут с Dispatchers.IO.
+    private val ctx: CIFSContext by lazy {
+        // slf4j-simple уровень до инициализации байндинга (stderr → logcat "System.err")
+        System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "trace")
         val props = Properties()
         props.setProperty("jcifs.smb.client.minVersion", "SMB202")
         props.setProperty("jcifs.smb.client.maxVersion", "SMB311")
+        // DFS выключен: не ждём DFS-рефералы и не падаем на их таймаутах
+        props.setProperty("jcifs.smb.client.dfs.disabled", "true")
+        // ВАЖНО: SPNEGO-парсинг jcifs требует org.bouncycastle.asn1.ASN1ApplicationSpecific,
+        // удалённого из bcprov-jdk18on (bcprov-jdk15on исключён сборкой из-за конфликта
+        // классов с sshj). NTLMSSP (useRawNTLM) — стандартный для SMB2/3+Samba путь,
+        // BouncyCastle не нужен вовсе.
+        props.setProperty("jcifs.smb.useRawNTLM", "true")
         val base = BaseContext(PropertyConfiguration(props))
-        ctx = base.withCredentials(NtlmPasswordAuthenticator("", user, password))
+        base.withCredentials(NtlmPasswordAuthenticator("", user, password))
     }
 
     /** путь каталога: "/dir/" (для listFiles/mkdir). */
@@ -52,6 +62,7 @@ class SmbProvider(
         val root = parentPath(dir)
         val source = SmbFile(dirUrl(dir), ctx)
         val raw = source.listFiles()
+        android.util.Log.i("AiNasSmb", "list dir=" + dir + " url=" + dirUrl(dir) + " raw=" + raw.size)
         val items = raw.mapNotNull { child ->
             val name = child.name.trimEnd('/')
             if (name.isEmpty() || name == "..") return@mapNotNull null

@@ -25,14 +25,24 @@ object DshPair {
                 .header("Authorization", auth.basic)
                 .get()
                 .build()
+            // ВАЖНО: редирект не прослеживаем автоматически. OkHttp сохраняет заголовок
+            // Authorization при редиректе внутри одного хоста, а /dsh/?token=… отвечает
+            // на чужой Basic 401 — из-за этого pair-флоу падал и грузился /dsh/ без токена.
             Http.client.newBuilder()
-                .followRedirects(true)
+                .followRedirects(false)
                 .build()
                 .newCall(request)
                 .execute()
                 .use { resp ->
-                    val finalUrl = resp.request.url.toString()
-                    if (resp.isSuccessful && finalUrl.contains("token=")) finalUrl else null
+                    val loc = if (resp.isRedirect) resp.header("Location") else null
+                    when {
+                        loc != null && loc.contains("token=") ->
+                            if (loc.startsWith("http")) loc
+                            else "https://" + host + (if (loc.startsWith("/")) "" else "/") + loc
+                        resp.isSuccessful && resp.request.url.toString().contains("token=") ->
+                            resp.request.url.toString()
+                        else -> null
+                    }
                 }
         } catch (_: IOException) {
             null
@@ -41,5 +51,9 @@ object DshPair {
 
     /** Синхронный вариант для воркеров/фоновых потоков. */
     suspend fun fetchPairUrlSuspend(auth: AuthState, publicHostOverride: String? = null): String? =
-        withContext(Dispatchers.IO) { fetchPairUrlBlocking(auth, publicHostOverride) }
+        withContext(Dispatchers.IO) {
+            val u = fetchPairUrlBlocking(auth, publicHostOverride)
+            android.util.Log.i("AiNasPair", "pair url = " + (u ?: "null"))
+            u
+        }
 }

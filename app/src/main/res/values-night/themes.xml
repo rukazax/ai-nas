@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ночная тема окна: тёмный фон activity в системной тёмной теме, чтобы не было
+     белой вспышки при старте и тёмного фона под прозрачными системными панелями. -->
+<resources>
+    <style name="Theme.AiNAS" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">@color/window_background_dark</item>
+    </style>
+</resources>

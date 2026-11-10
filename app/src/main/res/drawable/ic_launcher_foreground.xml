@@ -1,50 +1,95 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Ai NAS: корпус NAS-сервера с тремя дисковыми отсеками + AI-искра.
-     Всё содержимое — в безопасной зоне адаптивной иконки (круг ~33 от центра 54,54). -->
+<!-- Ai NAS v2: лицевая панель NAS-корпуса крупным планом —
+     три лотка HDD с белыми ручками и LED-индикаторами (открыт/открыт/жёлтый),
+     решётка вентиляции снизу, зелёный LED питания и AI-искра над корпусом.
+     канвас адаптивной иконки 108×108, содержимое в безопасном круге r≈33 от центра (54,54). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Корпус сервера -->
+    <!-- AI-искра над корпусом (четырёх концов, лазурная) -->
+    <path
+        android:fillColor="#4CC2FF"
+        android:pathData="M68,20.5 l1.9,5.6 5.6,1.9 -5.6,1.9 -1.9,5.6 -1.9,-5.6 -5.6,-1.9 5.6,-1.9 z" />
+
+    <!-- База-подсветка под корпусом -->
+    <path
+        android:fillColor="#1E4463"
+        android:pathData="M35,79 h38 a3,3 0 0 1 3,3 v1.5 a3,3 0 0 1 -3,3 h-38 a3,3 0 0 1 -3,-3 v-1.5 a3,3 0 0 1 3,-3 z" />
+
+    <!-- Корпус NAS (белый метал) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M36,38 h36 a6,6 0 0 1 6,6 v26 a6,6 0 0 1 -6,6 h-36 a6,6 0 0 1 -6,-6 v-26 a6,6 0 0 1 6,-6 z" />
+        android:pathData="M35,36 h38 a7,7 0 0 1 7,7 v28 a7,7 0 0 1 -7,7 h-38 a7,7 0 0 1 -7,-7 v-28 a7,7 0 0 1 7,-7 z" />
 
-    <!-- Отсек диска 1 -->
+    <!-- Верхняя кромка: лёгкая тень -->
     <path
         android:fillColor="#0D1B2E"
-        android:pathData="M35,46 h30 a2,2 0 0 1 2,2 v3 a2,2 0 0 1 -2,2 h-30 a2,2 0 0 1 -2,-2 v-3 a2,2 0 0 1 2,-2 z" />
+        android:fillAlpha="0.10"
+        android:pathData="M35,36 h38 a7,7 0 0 1 7,7 v3 h-52 v-3 a7,7 0 0 1 7,-7 z" />
+
+    <!-- Лоток HDD 1 -->
+    <path
+        android:fillColor="#0D1B2E"
+        android:pathData="M32,42.5 h34 a2,2 0 0 1 2,2 v2.5 a2,2 0 0 1 -2,2 h-34 a2,2 0 0 1 -2,-2 v-2.5 a2,2 0 0 1 2,-2 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.55"
+        android:pathData="M33.5,45.25 h4.5 v1.5 h-4.5 z" />
     <path
         android:fillColor="#4CC2FF"
-        android:pathData="M71.5,49.5 m-1.8,0 a1.8,1.8 0 1 1 3.6,0 a1.8,1.8 0 1 1 -3.6,0" />
+        android:pathData="M74,46 m-1.9,0 a1.9,1.9 0 1 1 3.8,0 a1.9,1.9 0 1 1 -3.8,0" />
 
-    <!-- Отсек диска 2 -->
+    <!-- Лоток HDD 2 -->
     <path
         android:fillColor="#0D1B2E"
-        android:pathData="M35,56 h30 a2,2 0 0 1 2,2 v3 a2,2 0 0 1 -2,2 h-30 a2,2 0 0 1 -2,-2 v-3 a2,2 0 0 1 2,-2 z" />
+        android:pathData="M32,51.5 h34 a2,2 0 0 1 2,2 v2.5 a2,2 0 0 1 -2,2 h-34 a2,2 0 0 1 -2,-2 v-2.5 a2,2 0 0 1 2,-2 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.55"
+        android:pathData="M33.5,54.25 h4.5 v1.5 h-4.5 z" />
     <path
         android:fillColor="#4CC2FF"
-        android:pathData="M71.5,59.5 m-1.8,0 a1.8,1.8 0 1 1 3.6,0 a1.8,1.8 0 1 1 -3.6,0" />
+        android:pathData="M74,55 m-1.9,0 a1.9,1.9 0 1 1 3.8,0 a1.9,1.9 0 1 1 -3.8,0" />
 
-    <!-- Отсек диска 3 -->
+    <!-- Лоток HDD 3 -->
     <path
         android:fillColor="#0D1B2E"
-        android:pathData="M35,66 h30 a2,2 0 0 1 2,2 v3 a2,2 0 0 1 -2,2 h-30 a2,2 0 0 1 -2,-2 v-3 a2,2 0 0 1 2,-2 z" />
+        android:pathData="M32,60.5 h34 a2,2 0 0 1 2,2 v2.5 a2,2 0 0 1 -2,2 h-34 a2,2 0 0 1 -2,-2 v-2.5 a2,2 0 0 1 2,-2 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.55"
+        android:pathData="M33.5,63.25 h4.5 v1.5 h-4.5 z" />
     <path
         android:fillColor="#FFB454"
-        android:pathData="M71.5,69.5 m-1.8,0 a1.8,1.8 0 1 1 3.6,0 a1.8,1.8 0 1 1 -3.6,0" />
+        android:pathData="M74,64 m-1.9,0 a1.9,1.9 0 1 1 3.8,0 a1.9,1.9 0 1 1 -3.8,0" />
 
-    <!-- AI-искра -->
+    <!-- Решётка вентиляции (4 щели) -->
     <path
-        android:fillColor="#4CC2FF"
-        android:pathData="M74,24 l2.6,6.4 6.4,2.6 -6.4,2.6 -2.6,6.4 -2.6,-6.4 -6.4,-2.6 6.4,-2.6 z" />
-
-    <!-- Сетевой луч: соединение NAS с облаком/миром -->
-    <path
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="3"
+        android:strokeColor="#0D1B2E"
+        android:strokeWidth="1.8"
         android:strokeLineCap="round"
-        android:pathData="M32,84 h44" />
+        android:pathData="M34,69.5 v4" />
+    <path
+        android:strokeColor="#0D1B2E"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M39,69.5 v4" />
+    <path
+        android:strokeColor="#0D1B2E"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M44,69.5 v4" />
+    <path
+        android:strokeColor="#0D1B2E"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M49,69.5 v4" />
+
+    <!-- LED питания (зелёный) -->
+    <path
+        android:fillColor="#5DDB8C"
+        android:pathData="M73.9,71.5 m-2.2,0 a2.2,2.2 0 1 1 4.4,0 a2.2,2.2 0 1 1 -4.4,0" />
 </vector>

@@ -187,10 +187,30 @@ private fun GalleryThumb(
                 if (!cache.exists() || cache.length() == 0L) {
                     val tmp = File(context.cacheDir, "gallery_tmp.bin")
                     storage.download(entry.path, tmp) { _, _ -> }
-                    tmp.copyTo(cache, overwrite = true)
+                    val isVideo = entry.name.substringAfterLast('.', "").lowercase()
+                        .let { it == "mp4" || it == "mov" || it == "webm" || it == "mkv" || it == "avi" }
+                    if (isVideo) {
+                        // Видео: кадр через MediaMetadataRetriever (BitmapFactory видео не декодирует)
+                        val retriever = android.media.MediaMetadataRetriever()
+                        try {
+                            retriever.setDataSource(tmp.absolutePath)
+                            val frame = retriever.getFrameAtTime(1_000_000)
+                            if (frame != null) {
+                                java.io.FileOutputStream(cache).use { out ->
+                                    frame.compress(Bitmap.CompressFormat.JPEG, 85, out)
+                                }
+                                frame.recycle()
+                            }
+                        } finally {
+                            retriever.release()
+                        }
+                    } else {
+                        tmp.copyTo(cache, overwrite = true)
+                    }
                     tmp.delete()
                 }
                 bitmap = decodeScaled(cache, 512)
+                if (bitmap == null) failed = true
             } catch (_: Exception) {
                 failed = true
             }

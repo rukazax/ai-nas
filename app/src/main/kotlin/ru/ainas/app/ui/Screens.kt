@@ -25,6 +25,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import ru.ainas.app.auth.AuthState
 import ru.ainas.app.auth.DshPair
+import ru.ainas.app.net.Http
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /**
  * Пул WebView по ключу страницы: инстансы переживают смену страниц пейджера
@@ -35,6 +37,16 @@ private val webViewPool = LinkedHashMap<String, WebView>()
 /** Тихий рестарт DSH-сессии не чаще, чем раз в 30 секунд. */
 private var lastDshRefreshMs = 0L
 
+/** Заголовки запроса, которые OkHttp/WebView проставляет сам — не пересылаем. */
+private val IGNORED_REQ_HEADERS = setOf(
+    "authorization", "cookie", "host", "content-length", "accept-encoding", "connection",
+)
+
+/** Заголовки ответа, которые нельзя копировать один-к-одному в WebResourceResponse. */
+private val IGNORED_RESP_HEADERS = setOf(
+    "transfer-encoding", "content-encoding", "content-length", "connection", "keep-alive",
+)
+
 @SuppressLint("SetJavaScriptEnabled")
 private fun createWebView(
     context: android.content.Context,
@@ -43,7 +55,22 @@ private fun createWebView(
     auth: AuthState,
     onSessionLost: () -> Unit,
 ): WebView = WebView(context).apply {
+    // Хост NAS-сервера для под-ресурсов (прокси с basic, см. shouldInterceptRequest)
+    val resourceHost = initialUrl.toHttpUrlOrNull()?.host ?: ""
     settings.javaScriptEnabled = true
+    // CDP-отладка WebView (chrome://inspect на компьютере) + ручная диагностика
+    android.webkit.WebView.setWebContentsDebuggingEnabled(true)
+    // лог консоли браузера → logcat (диагностика пустых экранов SPA)
+    setWebChromeClient(object : android.webkit.WebChromeClient() {
+        override fun onConsoleMessage(console: android.webkit.ConsoleMessage?): Boolean {
+            android.util.Log.i(
+                "AiNasWeb",
+                "console[" + (console?.messageLevel() ?: "") + "] " + (console?.message() ?: "") +
+                    " @" + (console?.sourceId()?.substringAfterLast('/') ?: ""),
+            )
+            return true
+        }
+    })
     settings.domStorageEnabled = true
     settings.loadWithOverviewMode = true
     settings.useWideViewPort = true
@@ -52,8 +79,60 @@ private fun createWebView(
     settings.mediaPlaybackRequiresUserGesture = false
     settings.loadsImagesAutomatically = true
     webViewClient = object : WebViewClient() {
+        /**
+         * Прозрачный прокси одного хоста: nginx отдаёт статические ресурсы DSH
+         * только с Basic-аутентификацией и НЕ принимает dsh-auth-cookie, а WebView
+         * не пробрасывает задачу на ввод basic для под-ресурсов (CSS/JS/XHR) —
+         * из-за этого DSH/noVNC тонут с пустым тёмным экраном. Запрашиваем сами через
+         * OkHttp с заголовком Authorization и возвращаем результат в WebView.
+         */
+        override fun shouldInterceptRequest(
+            view: WebView,
+            request: android.webkit.WebResourceRequest,
+        ): android.webkit.WebResourceResponse? {
+            val method = request.method.uppercase()
+            if (request.url.host != resourceHost || (method != "GET" && method != "HEAD")) return null
+            return try {
+                val ok = Http.client.newBuilder()
+                    .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+                val headers = okhttp3.Headers.Builder().apply {
+                    request.requestHeaders?.forEach { e ->
+                        if (e.key.lowercase() !in IGNORED_REQ_HEADERS) add(e.key, e.value)
+                    }
+                }
+                val newReqBuilder = okhttp3.Request.Builder()
+                    .url(request.url.toString())
+                    .headers(headers.build())
+                    .header("Authorization", auth.basic)
+                if (method == "HEAD") newReqBuilder.head() else newReqBuilder.get()
+                val resp = ok.newCall(newReqBuilder.build()).execute()
+                if (resp.code >= 400 || resp.body == null) {
+                    resp.close()
+                    return null // ошибку отдаём браузеру как есть
+                }
+                val contentType = resp.header("Content-Type") ?: "application/octet-stream"
+                val mime = contentType.split(';').firstOrNull() ?: "application/octet-stream"
+                val charset = contentType.split(';').getOrNull(1)
+                    ?.split('=')?.getOrNull(1)?.trim()
+                val out = android.webkit.WebResourceResponse(mime, charset, resp.body!!.byteStream())
+                return out
+            } catch (_: Exception) {
+                null // сеть ладит сама, отдаём дефолтное поведение браузера
+            }
+        }
+
         override fun onPageFinished(view: WebView, url: String?) {
             android.util.Log.i("AiNasWeb", "finished: " + url)
+            // Найдено через CDP-отладку: часть сборок WebView на HyperOS НЕ резолвит
+            // height:100% у html/body (при innerHeight=904 считается 0px) — SPA DSH
+            // и noVNC остаются нулевой высоты → пустой тёмный экран. Явная высота
+            // в пикселях чинит отрисовку и для DSH, и для noVNC.
+            view.evaluateJavascript(
+                "(function(){var h=window.innerHeight;var s=document.getElementById('ainas-view-h')||document.createElement('style');s.id='ainas-view-h';s.textContent='html,body,#root{height:'+h+'px!important;min-height:0!important}';(document.head||document.documentElement).appendChild(s)})();",
+                null,
+            )
         }
 
         override fun onReceivedError(view: WebView, req: android.webkit.WebResourceRequest, err: android.webkit.WebResourceError) {
@@ -73,11 +152,14 @@ private fun createWebView(
         override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
             super.doUpdateVisitedHistory(view, url, isReload)
             val u = url ?: return
-            val lostSession = u.contains("/dsh/pair") || u.contains("/dsh/login") ||
-                (pageKey == "dsh" && u.endsWith("/dsh/") && !u.contains("token="))
+            // ВАЖНО: SPA DSH снимает ?token= из адресной строки сразу после старта —
+            // это нормальная работа, а не потеря сессии. Раньше это приводило к циклу:
+            // свежий токен → SPA сняла → onSessionLost → снова pair → снова сняла...
+            // Потерей считаем только настоящий редирект на pair-страницу или логин.
+            val lostSession = u.contains("/dsh/pair") || u.contains("/dsh/login")
             if (pageKey == "dsh" && lostSession) {
                 val now = System.currentTimeMillis()
-                if (now - lastDshRefreshMs > 30_000) {
+                if (now - lastDshRefreshMs > 10_000) {
                     lastDshRefreshMs = now
                     onSessionLost()
                 }
@@ -110,6 +192,9 @@ fun NasWebView(
             createWebView(context, pageKey, url, auth, onSessionLost)
         }
     }
+    // Пул живёт дольше композиции: при изменении url (например, свежий pair-токен DSH)
+    // перезагружаем тот же инстанс, иначе на экране останется старая страница.
+    var loadedUrl by remember(pageKey) { mutableStateOf<String?>(null) }
     AndroidView(
         modifier = modifier.fillMaxSize(),
         factory = {
@@ -118,6 +203,10 @@ fun NasWebView(
         },
         update = { wv ->
             if (isPageVisible) wv.onResume() else wv.onPause()
+            if (loadedUrl != url) {
+                loadedUrl = url
+                wv.loadUrl(url)
+            }
         },
     )
     DisposableEffect(pageKey) {
@@ -165,8 +254,10 @@ fun DshScreen(
     publicHostOverride: String?,
 ) {
     var url by rememberSaveable(auth.basic, publicHostOverride) { mutableStateOf<String?>(null) }
+    // счётчик принудительного обновления: onSessionLost обнуляет url и пинает эффект
+    var refresh by remember { mutableStateOf(0) }
 
-    LaunchedEffect(auth.basic, publicHostOverride) {
+    LaunchedEffect(auth.basic, publicHostOverride, refresh) {
         val u: String? = url
         if (u == null || !u.contains("token=")) {
             url = DshPair.fetchPairUrlSuspend(auth, publicHostOverride)
@@ -189,8 +280,11 @@ fun DshScreen(
             auth = auth,
             isPageVisible = isPageVisible,
             onSessionLost = {
-                // потеря сессии: сбрасываем URL — LaunchedEffect получит свежий токен
-                if (currentUrl.contains("token=")) url = null
+                // SPA сняла token из URL: запрашиваем свежий pair-токен и перезагружаем
+                if (currentUrl.contains("token=")) {
+                    url = null
+                    refresh++
+                }
             },
         )
     }
