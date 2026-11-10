@@ -138,9 +138,9 @@ private fun HomePager(auth: AuthState?, onOpenFiles: () -> Unit) {
                 verticalAlignment = Alignment.Top,
             ) { page ->
                 when (page) {
-                    0 -> DashboardScreen()
-                    1 -> DesktopScreen()
-                    else -> DshScreen()
+                    0 -> DashboardScreen(auth = auth)
+                    1 -> DesktopScreen(auth = auth)
+                    else -> DshScreen(auth = auth)
                 }
             }
 

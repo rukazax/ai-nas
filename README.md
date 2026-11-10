@@ -1,44 +1,99 @@
-# AI NAS — Android-приложение для домашнего NAS
+# <img src="screenshots/v1.1.0-icon.png" width="52" align="top"> 🚀 Ai NAS — Android-клиент домашнего сервера
 
-Нативный Android-клиент (Kotlin + Jetpack Compose + Material 3) для домашнего NAS-сервера:
-доступ к файлам, фото-синхронизация и мониторинг дашборда.
+<p align="center">
+  <img src="screenshots/v1.1.0-icon.png" width="110" alt="Иконка Ai NAS">
+  <br><b>Корпус NAS · три диска · AI-искра</b> ✨
+</p>
 
-## Возможности
+<p align="center">
+  <img src="screenshots/v1.1.0-login-dark.png" width="270" alt="Экран входа, тёмная тема">
+  &nbsp;
+  <img src="screenshots/v1.1.0-dashboard.png" width="270" alt="Дашборд NAS">
+  &nbsp;
+  <img src="screenshots/v1.1.0-help.png" width="270" alt="Справка по подключению">
+</p>
 
-- **Протоколы доступа**: SMB, WebDAV, SFTP — файловый менеджер поверх Storage Access Framework
-- **Фото-синхронизация**: фоновый воркер (WorkManager) автозагрузки фотографий с телефона на NAS
-- **Авторизация**: сохранение сессий между подключениями (AuthStore)
-- **Обновления**: встроенный UpdateChecker
-- **UI**: Compose + Material 3, тёмная/светлая тема, боковое меню
+> **Ai NAS** = Synology Drive + Synology Photos + дашборд сервера + удалённый рабочий стол — в одном лёгком приложении под Android. Kotlin + Jetpack Compose + Material 3. 🧡
 
-## Скачать
+---
 
-Готовые APK — на странице [Releases](https://github.com/rukazax/ai-nas/releases/latest).
+## ✨ Что умеет
 
-## Сборка из исходников
+| 🔧 Возможность | 📝 Описание |
+|---|---|
+| 📊 **Дашборд NAS** | Живые SMART-данные, температуры дисков, пул NAS-DATA, слоты корпуса — прямо на телефоне |
+| 🖥 **Рабочий стол** | noVNC-канал к Ubuntu-сессии сервера (`/ubuntu/`) |
+| 🌐 **DSH GUI** | Встроенная страница DeepSeek Harness (`/dsh/`) + сопряжение через Chrome Custom Tabs |
+| 📁 **Файл-менеджер** | SMB, SFTP и WebDAV в одном списке: загрузки, переименование, избранное, «сохранить на устройство» |
+| 📷 **Автосинк фото** | WorkManager-выгрузка снимков на NAS (foreground-service, уведомление о прогрессе) |
+| 🔄 **Автообновления** | Проверка GitHub Releases и установка APK в пару тапов |
+| 🌗 **Тема** | Автоматически следует системной светлой/тёмной — полная Material 3 палитра |
+| 🧩 **Умное подключение** | Само перебирает маршруты: DSH-API → публичный дашборд `/info/` → DSH GUI → локальный `:8890` → корень |
+
+## 🔌 Как подключиться
+
+Сервер доступен **по двум адресам** — выбирайте по ситуации:
+
+| Ситуация | Что вводить в поле «Сервер» | Как работает |
+|---|---|---|
+| 🌍 **Из интернета** (мобильная сеть, чужой Wi-Fi) | `79e.ru` | HTTPS-туннель через VPS (nginx → SSH reverse-tunnel) |
+| 🏠 **Дома** (та же Wi-Fi сеть) | `192.168.88.35` | Напрямую: дашборд `http://<ip>:8890/`, без интернета |
+
+- 👤 **Логин/пароль** — ваша учётка Linux на сервере.
+- 🔎 Приложение само найдёт живой маршрут — ждать «подбора» несколько секунд нормально.
+- ⚠️ `401` = неверные данные учётной записи (не проблема сети). «Сервер недоступен» = маршруты не отвечают — проверьте сеть или смените адрес.
+
+### 🗺 Карта маршрутов сервера
+
+| Публичный путь (79e.ru) | Локальный путь (192.168.88.35) | Что это |
+|---|---|---|
+| `https://79e.ru/info/` | `http://192.168.88.35:8890/` | Дашборд NAS |
+| `https://79e.ru/dsh/` | — | DSH GUI |
+| `https://79e.ru/ubuntu/` | — | noVNC-рабочий стол |
+| `https://79e.ru/apk/` | — | Прямая ссылка на APK |
+
+Туннель держит SSH с ключом `id_ed25519_ai-nas`:
+`-R 127.0.0.1:18080→:8080 (DSH) -R 127.0.0.1:18081→127.0.0.1:8085 (noVNC) -R 127.0.0.1:18082→:8890 (дашборд) root@79e.ru`.
+
+## 📲 Установка
+
+1. Скачайте APK: `https://79e.ru/apk/ainas-1.1.0.apk` 📥
+2. Откройте файл → разрешите установку из этого источника.
+3. Play Защита может ворчать на self-signed сборку: «Подробнее» → «Все равно установить» → введите PIN. 🛡
+4. Войдите: сервер `79e.ru`, ваша учётка. Готово! ✅
+
+## 🏗 Сборка из исходников
 
 ```bash
-./gradlew :app:assembleDebug    # отладочный APK в app/build/outputs/apk/debug/
-./gradlew :app:assembleRelease  # релизный (нужны подписи)
+git clone https://github.com/rukazax/ai-nas.git
+cd ai-nas
+echo "sdk.dir=/path/to/android-sdk" > local.properties
+gradle assembleDebug        # Gradle 8.9, AGP, compileSdk 35
+# APK: app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Требуется Android Studio (или SDK + JDK 17). `local.properties` создаётся локально:
+Требования: JDK 17 ☕, Android SDK 35.
 
-```properties
-sdk.dir=/путь/к/Android/sdk
-```
+## 🖼 Скриншоты
 
-## Структура
+Версия 1.0.0 (история):
+
+| Вход (тёмная) | Ошибка подключения | Дашборд |
+|---|---|---|
+| ![login](screenshots/v1.0.0-login-dark.png) | ![error](screenshots/v1.0.0-login-error.png) | ![dash](screenshots/v1.0.0-dashboard.png) |
+
+Актуальные скриншоты v1.1.0 — в начале README и в папке [`screenshots/`](screenshots/).
+
+## 🗂 Структура
 
 ```
 app/src/main/kotlin/ru/ainas/app/
-├── auth/    AuthStore — учётные записи и сессии
-├── net/     HttpClient, SmbProvider, WebDavProvider, SftpProvider,
-│            PhotoSyncWorker, StorageUri
-├── up/      UpdateChecker
-└── ui/      Compose-экраны: Landing, Drawer, Screens, Theme
+├── auth/AuthStore.kt      # сессия, multi-route probe, DataStore
+├── net/                   # OkHttp, SMB/SFTP/WebDAV провайдеры, PhotoSyncWorker
+├── ui/                    # Compose: тема, логин, пейджер (дашборд/десктоп/DSH), файлы
+└── up/UpdateChecker.kt    # автообновления через GitHub Releases
 ```
 
-## Лицензия
+## 📜 Лицензия
 
-MIT
+MIT © 2026 rukazax

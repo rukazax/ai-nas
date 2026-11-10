@@ -16,12 +16,16 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.Credentials
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import ru.ainas.app.net.Http
 import java.io.IOException
 
 /** Файл DataStore намеренно объявлен на уровне файла — единственный инстанс в приложении. */
 internal val Context.mainPrefsStore by preferencesDataStore(name = "ainas_main")
+
+/** Публичное доменное имя NAS — работает и дома, и из интернета. */
+const val DEFAULT_PUBLIC_HOST: String = "79e.ru"
 
 /** Данные сессии: NAS + текущие basic-данные + опциональный DSH-токен. */
 data class AuthState(
@@ -33,8 +37,120 @@ data class AuthState(
 ) {
     fun userLine(): String = user + "@" + host
 
-    fun dshBaseUrl(): String = "https://" + host + "/dsh/"
+    /** Публичный домен для маршрутов, у которых нет локального аналога (DSH, noVNC). */
+    fun publicHost(): String =
+        if (NasEndpoints.isLocalHost(host)) DEFAULT_PUBLIC_HOST else host
+
+    /** Страница 0: дашборд NAS (локально — :8890, из интернета — /info/). */
+    fun dashboardUrl(): String =
+        if (NasEndpoints.isLocalHost(host)) "http://" + host + ":8890/"
+        else "https://" + host + "/info/"
+
+    /** Страница 1: noVNC-рабочий стол сервера. */
+    fun desktopUrl(): String = "https://" + publicHost() + "/ubuntu/"
+
+    /** Страница 2: DSH GUI. */
+    fun dshBaseUrl(): String = "https://" + publicHost() + "/dsh/"
 }
+
+/** Кандидаты подключения и проверка живого сервера. */
+object NasEndpoints {
+
+    /** Локальные адреса: IPv4-частные сети, localhost, *.local (mDNS). */
+    fun isLocalHost(host: String): Boolean {
+        val h = host.lowercase().trim()
+        if (h == "localhost" || h.endsWith(".local")) return true
+        val m = Regex("^(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})$").find(h)
+        if (m != null) {
+            val a = m.groupValues[1].toIntOrNull() ?: return false
+            val b = m.groupValues[2].toIntOrNull() ?: return false
+            if (a == 10 || a == 127) return true
+            if (a == 192 && b == 168) return true
+            if (a == 172 && b in 16..31) return true
+        }
+        return false
+    }
+
+    /**
+     * По порядку пробуем маршруты, где сервер может жить:
+     * 1) POST https://<host>/dsh/api/auth/login — DSH-API с pair-token;
+     * 2) GET  https://<host>/info/ — публичный дашборд NAS (nginx на VPS);
+     * 3) GET  https://<host>/dsh/ — DSH GUI;
+     * 4) GET  http://<host>:8890/ — локальный дашборд NAS;
+     * 5) GET  https://<host>/ и http://<host>/ — общий фолбэк.
+     * Первый ответ с HTTP-статусом (даже 401/302) = сервер найден.
+     */
+    suspend fun probe(host: String, basic: String, json: String): ProbeResult =
+        withContext(Dispatchers.IO) {
+            var sawOpen = false   // хоть один маршрут ответил не-401/403
+            var sawDenied = false // сервер жив, но все маршруты вернули 401/403
+
+            // 1) DSH-API: единственный маршрут, где возможен токен
+            try {
+                val body = json.toRequestBody("application/json".toMediaType())
+                val request = Request.Builder()
+                    .url("https://" + host + "/dsh/api/auth/login")
+                    .header("Authorization", basic)
+                    .post(body)
+                    .build()
+                Http.client.newCall(request).execute().use { resp ->
+                    if (resp.code < 500) {
+                        val text = resp.body?.string().orEmpty()
+                        if (resp.code in 401..403) sawDenied = true else sawOpen = true
+                        val token = extractTokenFrom(text)
+                        // успешный логин с токеном — сразу возвращаем
+                        if (resp.isSuccessful && token != null) {
+                            return@withContext ProbeResult(true, token, denied = false)
+                        }
+                    }
+                }
+            } catch (_: IOException) {
+                // маршрут недоступен — идём дальше
+            }
+
+            val gets = listOf(
+                "https://" + host + "/info/",
+                "https://" + host + "/dsh/",
+                "http://" + host + ":8890/",
+                "https://" + host + "/",
+                "http://" + host + "/",
+            )
+            for (url in gets) {
+                try {
+                    val probe = Request.Builder()
+                        .url(url)
+                        .header("Authorization", basic)
+                        .get()
+                        .build()
+                    Http.client.newCall(probe).execute().use { resp ->
+                        if (resp.code in 401..403) sawDenied = true else sawOpen = true
+                    }
+                } catch (_: IOException) {
+                    // пробуем следующий вариант
+                }
+            }
+            ProbeResult(reachable = sawOpen || sawDenied, token = null, denied = !sawOpen && sawDenied)
+        }
+
+    private fun extractTokenFrom(text: String): String? {
+        if (!text.contains("token")) return null
+        return try {
+            extractToken(Json.parseToJsonElement(text))
+        } catch (_: Exception) {
+            null
+        }
+    }
+}
+
+/** Результат проверки сервера: живой ли хост, выдал ли токен, запрещён ли доступ. */
+data class ProbeResult(
+    val reachable: Boolean,
+    val token: String?,
+    val denied: Boolean = false,
+)
+
+/** Сервер отвечает, но учётные данные отклонены (HTTP 401/403 на всех маршрутах). */
+class AuthDeniedException(message: String) : Exception(message)
 
 object AuthStore {
 
@@ -95,92 +211,35 @@ object AuthStore {
     }
 
     /**
-     * Логин по правилам ТЗ:
-     * 1) POST https://<host>/dsh/api/auth/login — если отвечает OK и в теле есть token,
-     *    сохраняем JWT-подобный pair-token вместе с basic;
-     * 2) если эндпоинт не отвечает (NAS отдаёт только Basic-auth) — проверяем присутствие
-     *    сервера простым HTTPS/HTTP-запросом и храним только Basic-заголовок;
-     * 3) если сервер не достижим вовсе — failure.
+     * Логин: нормализуем хост и перебираем известные маршруты сервера
+     * (NasEndpoints.probe): DSH-API → публичный дашборд → DSH GUI →
+     * локальный дашборд :8890 → корень. Если ни один не ответил — failure.
      */
     suspend fun login(context: Context, rawHost: String, user: String, pass: String): Result<AuthState> =
         withContext(Dispatchers.IO) {
             val host = normalizeHost(rawHost)
             val basic = Credentials.basic(user, pass)
-            var token: String? = null
-            var reachable = false
+            val body = json.encodeToString(
+                LoginRequest.serializer(),
+                LoginRequest(user = user, pass = pass),
+            )
 
-            // 1) попытка JWT/pair-token на DSH-API
-            try {
-                val body = json.encodeToString(
-                    LoginRequest.serializer(),
-                    LoginRequest(user = user, pass = pass),
-                ).toRequestBody("application/json".toMediaType())
-                val request = okhttp3.Request.Builder()
-                    .url("https://" + host + "/dsh/api/auth/login")
-                    .header("Authorization", basic)
-                    .post(body)
-                    .build()
-                Http.client.newCall(request).execute().use { resp ->
-                    if (resp.isSuccessful) {
-                        reachable = true
-                        val text = resp.body?.string().orEmpty()
-                        if (text.contains("token")) {
-                            try {
-                                token = extractToken(Json.parseToJsonElement(text))
-                            } catch (_: Exception) {
-                                token = null
-                            }
-                        }
-                    } else if (resp.code < 500) {
-                        // живой сервер, но этот маршрут не тот — считаем Basic-only NAS
-                        reachable = true
-                        resp.body?.string()
-                    }
-                }
-            } catch (_: IOException) {
-                reachable = false
-            }
-
-            // 2) NAS отвечает только Basic: проверяем любой HTTP(S)-ответ от хоста
-            if (!reachable) {
-                for (scheme in listOf("https", "http")) {
-                    try {
-                        val probe = okhttp3.Request.Builder()
-                            .url(scheme + "://" + host + "/")
-                            .header("Authorization", basic)
-                            .get()
-                            .build()
-                        Http.client.newCall(probe).execute().use { resp ->
-                            if (resp.code > 0) reachable = true
-                        }
-                    } catch (_: IOException) {
-                        // пробуем следующий вариант
-                    }
-                    if (reachable) break
-                }
-            }
-
-            if (!reachable) {
+            val probe = NasEndpoints.probe(host, basic, body)
+            if (!probe.reachable) {
                 return@withContext Result.failure(
-                    IOException("server unreachable: " + host)
+                    IOException("server unreachable: " + host),
+                )
+            }
+            if (probe.denied && probe.token == null) {
+                return@withContext Result.failure(
+                    AuthDeniedException("unauthorized: " + host),
                 )
             }
 
-            val auth = AuthState(host = host, user = user, pass = pass, basic = basic, dshToken = token)
+            val auth = AuthState(host = host, user = user, pass = pass, basic = basic, dshToken = probe.token)
             saveAuth(context, auth)
             Result.success(auth)
         }
-
-    private fun extractToken(element: kotlinx.serialization.json.JsonElement): String? {
-        if (element !is kotlinx.serialization.json.JsonObject) return null
-        for ((key, value) in element) {
-            if (key == "token" || key == "access_token" || key == "pair_token" || key == "jwt") {
-                val v = value as? kotlinx.serialization.json.JsonPrimitive
-                if (v != null && v.content.isNotBlank()) return v.content
-            }
-        }
-        return null
-    }
 
     /** "https://79e.ru:443/" -> "79e.ru"; оставляем только хост. */
     fun normalizeHost(host: String): String {
@@ -195,11 +254,18 @@ object AuthStore {
         val slashIdx = h.indexOf('/')
         if (slashIdx > 0) h = h.substring(0, slashIdx)
         val colonIdx = h.lastIndexOf(':')
-        if (colonIdx > 0 && !h.substring(colonIdx + 1).all { ch -> ch.isDigit() }) {
-            h = h.substring(0, colonIdx)
-        } else if (colonIdx > 0) {
-            h = h.substring(0, colonIdx)
-        }
+        if (colonIdx > 0) h = h.substring(0, colonIdx)
         return h
     }
+}
+
+internal fun extractToken(element: kotlinx.serialization.json.JsonElement): String? {
+    if (element !is kotlinx.serialization.json.JsonObject) return null
+    for ((key, value) in element) {
+        if (key == "token" || key == "access_token" || key == "pair_token" || key == "jwt") {
+            val v = value as? kotlinx.serialization.json.JsonPrimitive
+            if (v != null && v.content.isNotBlank()) return v.content
+        }
+    }
+    return null
 }

@@ -3,6 +3,7 @@ package ru.ainas.app.ui
 import android.content.Intent
 import android.net.Uri
 import android.webkit.CookieManager
+import android.webkit.HttpAuthHandler
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.background
@@ -28,10 +29,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.browser.customtabs.CustomTabsIntent
 import ru.ainas.app.R
+import ru.ainas.app.auth.AuthState
 
-/** Универсальный WebView-экран (дашборд NAS / noVNC-рабочий стол / DSH). */
+/** Универсальный WebView-экран (дашборд NAS / noVNC-рабочий стол / DSH).
+ *  Если сервер запрашивает HTTP Basic (nginx auth_basic на /info/) —
+ *  автоматически отвечаем учётными данными сессии. */
 @Composable
-fun NasWebView(url: String, modifier: Modifier = Modifier) {
+fun NasWebView(url: String, auth: AuthState? = null, modifier: Modifier = Modifier) {
     AndroidView(
         modifier = modifier.fillMaxSize(),
         factory = { ctx ->
@@ -40,7 +44,21 @@ fun NasWebView(url: String, modifier: Modifier = Modifier) {
                 settings.domStorageEnabled = true
                 settings.loadWithOverviewMode = true
                 settings.useWideViewPort = true
-                webViewClient = WebViewClient()
+                webViewClient = object : WebViewClient() {
+                    override fun onReceivedHttpAuthRequest(
+                        view: WebView,
+                        handler: HttpAuthHandler,
+                        host: String,
+                        realm: String,
+                    ) {
+                        val a = auth
+                        if (a != null && a.user.isNotBlank()) {
+                            handler.proceed(a.user, a.pass)
+                        } else {
+                            handler.cancel()
+                        }
+                    }
+                }
                 val cookies = CookieManager.getInstance()
                 cookies.setAcceptCookie(true)
                 cookies.setAcceptThirdPartyCookies(this, true)
@@ -53,23 +71,23 @@ fun NasWebView(url: String, modifier: Modifier = Modifier) {
     )
 }
 
-/** Страница 0: локальный дашборд NAS по http://192.168.88.35:8890 */
+/** Страница 0: дашборд NAS — локально :8890, из интернета /info/ (выбирает AuthState). */
 @Composable
-fun DashboardScreen() {
-    NasWebView(url = "http://192.168.88.35:8890/")
+fun DashboardScreen(auth: AuthState) {
+    NasWebView(url = auth.dashboardUrl(), auth = auth)
 }
 
 /** Страница 1: noVNC/Guacamole-десктоп сервера через браузер-канал. */
 @Composable
-fun DesktopScreen() {
-    NasWebView(url = "https://79e.ru/ubuntu/")
+fun DesktopScreen(auth: AuthState) {
+    NasWebView(url = auth.desktopUrl(), auth = auth)
 }
 
 /** Страница 2: DSH. При отсутствии cookie — кнопка сопряжения через Chrome Custom Tabs. */
 @Composable
-fun DshScreen() {
+fun DshScreen(auth: AuthState) {
     val context = LocalContext.current
-    var pairPrompt by remember { mutableStateOf(hasDshCookie()) }
+    var pairPrompt by remember { mutableStateOf(hasDshCookie(auth)) }
 
     if (!pairPrompt) {
         Column(
@@ -85,22 +103,23 @@ fun DshScreen() {
                     color = MaterialTheme.colorScheme.onBackground,
                 )
             }
-            TextButton(onClick = { openDshPair(context) }) {
+            TextButton(onClick = { openDshPair(context, auth) }) {
                 Text(text = stringResource(R.string.dsh_login_button), color = Color.White)
             }
-            TextButton(onClick = { pairPrompt = hasDshCookie() }) {
+            TextButton(onClick = { pairPrompt = hasDshCookie(auth) }) {
                 Text(text = stringResource(R.string.dsh_refresh))
             }
         }
     } else {
-        NasWebView(url = "https://79e.ru/dsh/")
+        NasWebView(url = auth.dshBaseUrl(), auth = auth)
     }
 }
 
-private fun hasDshCookie(): Boolean = CookieManager.getInstance().getCookie("https://79e.ru") == null
+private fun hasDshCookie(auth: AuthState): Boolean =
+    CookieManager.getInstance().getCookie("https://" + auth.publicHost()) == null
 
-private fun openDshPair(context: android.content.Context) {
-    val target = Uri.parse("https://79e.ru/dsh/pair")
+private fun openDshPair(context: android.content.Context, auth: AuthState) {
+    val target = Uri.parse("https://" + auth.publicHost() + "/dsh/pair")
     try {
         val customTabs = CustomTabsIntent.Builder().build()
         customTabs.launchUrl(context, target)

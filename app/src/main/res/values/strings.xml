@@ -5,12 +5,27 @@
     <!-- Экран входа -->
     <string name="login_title">Вход в Ai NAS</string>
     <string name="login_subtitle">Подключение к домашнему серверу</string>
-    <string name="login_host">Сервер</string>
+    <string name="login_host">Сервер (домен или IP)</string>
     <string name="login_user">Пользователь</string>
     <string name="login_password">Пароль</string>
     <string name="login_button">Войти</string>
-    <string name="login_in_progress">Проверяем доступ…</string>
-    <string name="login_error_unreachable">Сервер недоступен. Проверьте адрес и сеть.</string>
+    <string name="login_in_progress">Ищем сервер и проверяем доступ…</string>
+    <string name="login_error_unreachable">Сервер недоступен. Проверьте адрес и сеть — см. справку ниже.</string>
+    <string name="login_error_credentials">Сервер найден, но доступ запрещён. Проверьте логин и пароль.</string>
+    <string name="login_preset_public">79e.ru — из интернета</string>
+    <string name="login_preset_home">192.168.88.35 — дома</string>
+    <string name="login_preset_hint">Быстрый выбор сервера:</string>
+    <string name="login_show_password">Показать пароль</string>
+    <string name="login_hide_password">Скрыть пароль</string>
+
+    <!-- Справка по подключению -->
+    <string name="help_title">Справка по подключению</string>
+    <string name="help_intro">Сервер доступен по двум адресам — выбирайте по ситуации:</string>
+    <string name="help_item_public">🌍 Из интернета (везде, где есть сеть): введите 79e.ru. Работает через домашний Wi-Fi и мобильный интернет.</string>
+    <string name="help_item_home">🏠 Дома (та же Wi-Fi сеть): введите 192.168.88.35 — дашборд откроется напрямую, без интернета.</string>
+    <string name="help_item_creds">🔑 Пользователь и пароль — те же, что на сервере (учётка Linux). Приложение перепробует все известные маршруты автоматически: DSH-API, публичный дашборд, локальный :8890.</string>
+    <string name="help_item_trouble">🛠 Если «Сервер недоступен»: 1) проверьте, что телефон в сети (сайт 79e.ru открывается в браузере); 2) из дома попробуйте IP, извне — только домен; 3) пароль вводите внимательно — 401 означает неверные данные, а не проблему сети.</string>
+    <string name="help_hide">Скрыть справку</string>
 
     <!-- Страницы пейджера -->
     <string name="page_dashboard">Дашборд</string>
