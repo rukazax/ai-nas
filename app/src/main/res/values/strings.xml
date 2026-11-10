@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Ai NAS</string>
+
+    <!-- Экран входа -->
+    <string name="login_title">Вход в Ai NAS</string>
+    <string name="login_subtitle">Подключение к домашнему серверу</string>
+    <string name="login_host">Сервер</string>
+    <string name="login_user">Пользователь</string>
+    <string name="login_password">Пароль</string>
+    <string name="login_button">Войти</string>
+    <string name="login_in_progress">Проверяем доступ…</string>
+    <string name="login_error_unreachable">Сервер недоступен. Проверьте адрес и сеть.</string>
+
+    <!-- Страницы пейджера -->
+    <string name="page_dashboard">Дашборд</string>
+    <string name="page_desktop">Рабочий стол</string>
+    <string name="page_dsh">DSH</string>
+
+    <!-- DSH -->
+    <string name="dsh_need_pair">Требуется сопряжение с DSH</string>
+    <string name="dsh_login_button">Войти через DSH</string>
+    <string name="dsh_refresh">Обновить</string>
+
+    <!-- Файл-менеджер -->
+    <string name="files_title">Файл-менеджер</string>
+    <string name="protocol_sftp">SFTP</string>
+    <string name="protocol_smb">SMB</string>
+    <string name="protocol_webdav">WebDAV</string>
+    <string name="tab_files">Файлы</string>
+    <string name="tab_downloads">Загрузки</string>
+    <string name="tab_favorites">Избранное</string>
+    <string name="files_empty">Папка пуста</string>
+    <string name="files_load_error">Не удалось загрузить список файлов</string>
+    <string name="menu_rename">Переименовать</string>
+    <string name="menu_send">Отправить</string>
+    <string name="menu_delete">Удалить</string>
+    <string name="menu_save_local">Сохранить на устройство</string>
+    <string name="menu_open_file">Скачать и открыть</string>
+    <string name="menu_add_favorite">В избранное</string>
+    <string name="menu_remove_favorite">Убрать из избранного</string>
+    <string name="dialog_rename_title">Переименование</string>
+    <string name="dialog_rename_hint">Новое имя</string>
+    <string name="dialog_ok">ОК</string>
+    <string name="dialog_cancel">Отмена</string>
+    <string name="downloads_empty">Загрузок пока нет</string>
+    <string name="favorites_empty">Нет избранных файлов</string>
+    <string name="fab_new_folder">Новая папка</string>
+    <string name="fab_upload">Загрузить файл</string>
+    <string name="dialog_new_folder_title">Новая папка</string>
+    <string name="progress_downloading">Передача… %1$s из %2$s</string>
+
+    <!-- Боковое меню -->
+    <string name="drawer_title">Меню</string>
+    <string name="drawer_files">Файл-менеджер</string>
+    <string name="drawer_dashboard">Дашборд</string>
+    <string name="drawer_desktop">Рабочий стол</string>
+    <string name="drawer_dsh">DSH</string>
+    <string name="drawer_photo_sync">Выгрузка фото: включена</string>
+    <string name="drawer_check_updates">Проверить обновления</string>
+    <string name="drawer_logout">Выйти из аккаунта</string>
+
+    <!-- Обновления -->
+    <string name="update_available_title">Доступно обновление</string>
+    <string name="update_available_body">Обновить Ai NAS до %1$s?</string>
+    <string name="update_install">Установить</string>
+    <string name="update_checking">Проверяем обновления…</string>
+    <string name="update_none">У вас последняя версия</string>
+    <string name="update_download_failed">Не удалось загрузить обновление</string>
+</resources>

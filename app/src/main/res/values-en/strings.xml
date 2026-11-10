@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Ai NAS</string>
+
+    <string name="login_title">Ai NAS sign-in</string>
+    <string name="login_subtitle">Connect to your home server</string>
+    <string name="login_host">Server</string>
+    <string name="login_user">User</string>
+    <string name="login_password">Password</string>
+    <string name="login_button">Sign in</string>
+    <string name="login_in_progress">Checking access…</string>
+    <string name="login_error_unreachable">Server unreachable. Check the address and your network.</string>
+
+    <string name="page_dashboard">Dashboard</string>
+    <string name="page_desktop">Desktop</string>
+    <string name="page_dsh">DSH</string>
+
+    <string name="dsh_need_pair">DSH pairing required</string>
+    <string name="dsh_login_button">Sign in via DSH</string>
+    <string name="dsh_refresh">Refresh</string>
+
+    <string name="files_title">File manager</string>
+    <string name="protocol_sftp">SFTP</string>
+    <string name="protocol_smb">SMB</string>
+    <string name="protocol_webdav">WebDAV</string>
+    <string name="tab_files">Files</string>
+    <string name="tab_downloads">Downloads</string>
+    <string name="tab_favorites">Favorites</string>
+    <string name="files_empty">Folder is empty</string>
+    <string name="files_load_error">Failed to list files</string>
+    <string name="menu_rename">Rename</string>
+    <string name="menu_send">Send</string>
+    <string name="menu_delete">Delete</string>
+    <string name="menu_save_local">Save to device</string>
+    <string name="menu_open_file">Download and open</string>
+    <string name="menu_add_favorite">Add to favorites</string>
+    <string name="menu_remove_favorite">Remove from favorites</string>
+    <string name="dialog_rename_title">Rename</string>
+    <string name="dialog_rename_hint">New name</string>
+    <string name="dialog_ok">OK</string>
+    <string name="dialog_cancel">Cancel</string>
+    <string name="downloads_empty">No downloads yet</string>
+    <string name="favorites_empty">No favorites yet</string>
+    <string name="fab_new_folder">New folder</string>
+    <string name="fab_upload">Upload file</string>
+    <string name="dialog_new_folder_title">New folder</string>
+    <string name="progress_downloading">Transferring… %1$s of %2$s</string>
+
+    <string name="drawer_title">Menu</string>
+    <string name="drawer_files">File manager</string>
+    <string name="drawer_dashboard">Dashboard</string>
+    <string name="drawer_desktop">Desktop</string>
+    <string name="drawer_dsh">DSH</string>
+    <string name="drawer_photo_sync">Photo upload: enabled</string>
+    <string name="drawer_check_updates">Check for updates</string>
+    <string name="drawer_logout">Sign out</string>
+
+    <string name="update_available_title">Update available</string>
+    <string name="update_available_body">Update Ai NAS to %1$s?</string>
+    <string name="update_install">Install</string>
+    <string name="update_checking">Checking for updates…</string>
+    <string name="update_none">You are up to date</string>
+    <string name="update_download_failed">Failed to download the update</string>
+</resources>
