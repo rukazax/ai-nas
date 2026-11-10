@@ -25,7 +25,7 @@ import java.io.IOException
 internal val Context.mainPrefsStore by preferencesDataStore(name = "ainas_main")
 
 /** Публичное доменное имя NAS — работает и дома, и из интернета. */
-const val DEFAULT_PUBLIC_HOST: String = "79e.ru"
+const val DEFAULT_PUBLIC_HOST: String = "your_server.com"
 
 /** Данные сессии: NAS + текущие basic-данные + опциональный DSH-токен. */
 data class AuthState(
@@ -241,7 +241,7 @@ object AuthStore {
             Result.success(auth)
         }
 
-    /** "https://79e.ru:443/" -> "79e.ru"; оставляем только хост. */
+    /** "https://your_server.com:443/" -> "your_server.com"; оставляем только хост. */
     fun normalizeHost(host: String): String {
         var h = host.trim()
         for (scheme in listOf("https://", "http://")) {

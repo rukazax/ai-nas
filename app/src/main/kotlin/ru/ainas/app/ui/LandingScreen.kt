@@ -114,8 +114,8 @@ fun LandingScreen() {
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AssistChip(
-                onClick = { host = "79e.ru" },
-                label = { Text("🌍 79e.ru", fontSize = 12.sp) },
+                onClick = { host = "your_server.com" },
+                label = { Text("🌍 your_server.com", fontSize = 12.sp) },
                 colors = AssistChipDefaults.assistChipColors(
                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
                 ),

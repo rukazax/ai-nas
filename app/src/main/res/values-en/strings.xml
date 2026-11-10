@@ -11,7 +11,7 @@
     <string name="login_in_progress">Searching for the server and checking access…</string>
     <string name="login_error_unreachable">Server unreachable. Check the address and your network — see the help below.</string>
     <string name="login_error_credentials">Server found, but access denied. Check your username and password.</string>
-    <string name="login_preset_public">79e.ru — from the internet</string>
+    <string name="login_preset_public">your_server.com — from the internet</string>
     <string name="login_preset_home">192.168.88.35 — at home</string>
     <string name="login_preset_hint">Quick server pick:</string>
     <string name="login_show_password">Show password</string>
@@ -19,10 +19,10 @@
 
     <string name="help_title">Connection help</string>
     <string name="help_intro">The server answers on two addresses — pick one for your situation:</string>
-    <string name="help_item_public">🌍 From the internet (anywhere): enter 79e.ru. Works both on home Wi-Fi and mobile data.</string>
+    <string name="help_item_public">🌍 From the internet (anywhere): enter your_server.com. Works both on home Wi-Fi and mobile data.</string>
     <string name="help_item_home">🏠 At home (same Wi-Fi): enter 192.168.88.35 — the dashboard opens directly, no internet needed.</string>
     <string name="help_item_creds">🔑 Use the same Linux account as on the server. The app automatically tries every known route: DSH API, public dashboard, local :8890.</string>
-    <string name="help_item_trouble">🛠 If it says “Server unreachable”: 1) make sure the phone is online (open 79e.ru in a browser); 2) at home try the IP, away from home — only the domain; 3) type the password carefully — 401 means wrong credentials, not a network problem.</string>
+    <string name="help_item_trouble">🛠 If it says “Server unreachable”: 1) make sure the phone is online (open your_server.com in a browser); 2) at home try the IP, away from home — only the domain; 3) type the password carefully — 401 means wrong credentials, not a network problem.</string>
     <string name="help_hide">Hide help</string>
 
     <string name="page_dashboard">Dashboard</string>
