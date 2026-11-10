@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -15,15 +16,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.rememberDrawerState
-import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,143 +31,106 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.rememberNavController
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import ru.ainas.app.auth.AuthState
 import ru.ainas.app.auth.AuthStore
+import ru.ainas.app.settings.AppSettings
+import ru.ainas.app.settings.SettingsStore
+import ru.ainas.app.settings.ThemeMode
 import kotlin.math.abs
 import androidx.compose.ui.graphics.Color
 
 /**
  * Корень приложения:
  * - нет аккаунта -> LandingScreen;
- * - есть -> NavHost: "home" (встроенный HorizontalPager из трёх WebView-страниц) и "files".
+ * - есть -> один HorizontalPager из 5 страниц по кругу:
+ *   Дашборд → Файлы → DSH → ubuntu → Настройки → (снова Дашборд).
  */
 @Composable
-fun AppRoot(widthSizeClass: WindowWidthSizeClass) {
+fun AppRoot() {
     val context = LocalContext.current
     val authFlow = remember(context) { AuthStore.authFlow(context) }
     val auth: AuthState? by authFlow.collectAsStateWithLifecycle(initialValue = null)
+    val settings by remember(context) { SettingsStore.flow(context) }
+        .collectAsStateWithLifecycle(initialValue = AppSettings())
 
-    val ready = remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        // DataStore выписывает состояние при первом чтении: ждём его, чтобы не мигнуть формой
-        authFlow.first()
-        ready.value = true
+    val dark = when (settings.themeMode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
     }
-
-    if (!ready.value) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Material3HostColor()),
-            contentAlignment = Alignment.Center,
-        ) {
-            CircularProgressIndicator()
-        }
-        return
-    }
-
-    val navController = rememberNavController()
-    NavHost(navController = navController, startDestination = "home") {
-        composable("home") {
+    AiNasTheme(dark = dark) {
+        if (auth == null) {
+            LandingScreen()
+        } else {
             HomePager(
-                auth = auth,
-                onOpenFiles = { navController.navigate("files") },
-            )
-        }
-        composable("files") {
-            FilesScreen(
-                widthSize = widthSizeClass,
-                auth = auth ?: return@composable,
-                onClose = { navController.popBackStack() },
+                auth = auth!!,
+                settings = settings,
             )
         }
     }
 }
 
+/** Пейджер-оболочка: 5 страниц, циклические свайпы по кромкам, точки страниц. */
 @Composable
-private fun Material3HostColor(): Color = MaterialTheme.colorScheme.background
-
-/** Pager-оболочка: 3 страницы, скрытый edge-drawer, невидимые боковые кромки. */
-@Composable
-private fun HomePager(auth: AuthState?, onOpenFiles: () -> Unit) {
-    if (auth == null) {
-        LandingScreen()
-        return
-    }
-
-    val pagerState = rememberPagerState(pageCount = { 3 })
-    val drawerState = rememberDrawerState(DrawerValue.Closed)
+private fun HomePager(auth: AuthState, settings: AppSettings) {
+    val pagerState = rememberPagerState(pageCount = { 5 })
     val scope = rememberCoroutineScope()
+    val publicHost = settings.publicHost.takeIf { it.isNotBlank() }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        gesturesEnabled = false,
-        drawerContent = {
-            ModalDrawerSheet {
-                DrawerScreen(
+    Box(modifier = Modifier.fillMaxSize()) {
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize(),
+            verticalAlignment = Alignment.Top,
+        ) { page ->
+            when (page) {
+                0 -> DashboardScreen(auth = auth, isPageVisible = pagerState.currentPage == 0)
+                1 -> FilesScreen(
                     auth = auth,
-                    onOpenFiles = {
-                        scope.launch { drawerState.close() }
-                        onOpenFiles()
-                    },
-                    onNavigatePage = { page ->
-                        scope.launch {
-                            drawerState.close()
-                            pagerState.animateScrollToPage(page)
-                        }
-                    },
+                    settings = settings,
+                    onBackToDashboard = { scope.launch { pagerState.animateScrollToPage(0) } },
                 )
+                2 -> DshScreen(
+                    auth = auth,
+                    isPageVisible = pagerState.currentPage == 2,
+                    publicHostOverride = publicHost,
+                )
+                3 -> DesktopScreen(
+                    auth = auth,
+                    isPageVisible = pagerState.currentPage == 3,
+                    publicHostOverride = publicHost,
+                )
+                else -> SettingsScreen(auth = auth, settings = settings)
             }
-        },
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxSize(),
-                verticalAlignment = Alignment.Top,
-            ) { page ->
-                when (page) {
-                    0 -> DashboardScreen(auth = auth)
-                    1 -> DesktopScreen(auth = auth)
-                    else -> DshScreen(auth = auth)
-                }
-            }
+        }
 
-            PageDots(currentPage = pagerState.currentPage, modifier = Modifier.align(Alignment.TopCenter))
+        PageDots(currentPage = pagerState.currentPage, modifier = Modifier.align(Alignment.TopCenter))
 
-            EdgeNavStrip(
-                isLeftEdge = true,
-                currentPage = { pagerState.currentPage },
-                pageCount = { pagerState.pageCount },
-                onNavigate = { target -> scope.launch { pagerState.animateScrollToPage(target) } },
-                onOpenDrawer = { scope.launch { drawerState.open() } },
+        // Циклические свайпы: с 1-й страницы вправо — на последнюю, с последней влево — на первую.
+        if (pagerState.currentPage == 0) {
+            WrapStrip(
+                isLeft = true,
+                onWrap = { scope.launch { pagerState.animateScrollToPage(4) } },
                 modifier = Modifier.align(Alignment.CenterStart),
             )
-            EdgeNavStrip(
-                isLeftEdge = false,
-                currentPage = { pagerState.currentPage },
-                pageCount = { pagerState.pageCount },
-                onNavigate = { target -> scope.launch { pagerState.animateScrollToPage(target) } },
-                onOpenDrawer = { },
+        }
+        if (pagerState.currentPage == 4) {
+            WrapStrip(
+                isLeft = false,
+                onWrap = { scope.launch { pagerState.animateScrollToPage(0) } },
                 modifier = Modifier.align(Alignment.CenterEnd),
             )
         }
     }
 
-    BackHandler(enabled = pagerState.currentPage > 0) {
+    // Системный «назад»: шаг влево по страницам; страница Файлов управляет собой сама.
+    BackHandler(enabled = pagerState.currentPage > 0 && pagerState.currentPage != 1) {
         scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
-    }
-    BackHandler(enabled = drawerState.isOpen) {
-        scope.launch { drawerState.close() }
     }
 }
 
-/** Три точки текущей страницы (без нижнего бара). */
+/** Пять точек текущей страницы. */
 @Composable
 private fun PageDots(currentPage: Int, modifier: Modifier = Modifier) {
     val active = MaterialTheme.colorScheme.primary
@@ -183,7 +140,7 @@ private fun PageDots(currentPage: Int, modifier: Modifier = Modifier) {
             .padding(top = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        repeat(3) { index ->
+        repeat(5) { index ->
             Box(
                 modifier = Modifier
                     .size(7.dp)
@@ -194,25 +151,20 @@ private fun PageDots(currentPage: Int, modifier: Modifier = Modifier) {
 }
 
 /**
- * Невидимая кромка (28dp) поверх WebView:
- * лево: свайп вправо = drawer, свайп влево = следующая страница;
- * право: свайп влево = следующая страница, свайп вправо = назад.
- * Вертикальные жесты не перехватываем — WebView и пейджер живут сами.
+ * Невидимая кромка (32dp) для цикла: свайп от левого края вправо на первой
+ * странице — к последней; свайп от правого края влево на последней — к первой.
  */
 @Composable
-private fun EdgeNavStrip(
-    isLeftEdge: Boolean,
-    currentPage: () -> Int,
-    pageCount: () -> Int,
-    onNavigate: (Int) -> Unit,
-    onOpenDrawer: () -> Unit,
+private fun WrapStrip(
+    isLeft: Boolean,
+    onWrap: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier
             .fillMaxHeight()
-            .width(28.dp)
-            .pointerInput(isLeftEdge) {
+            .width(32.dp)
+            .pointerInput(isLeft) {
                 awaitEachGesture {
                     val down = awaitDown()
                     val pointerId = down.id
@@ -225,17 +177,9 @@ private fun EdgeNavStrip(
                         val x = change.position.x
                         traveled += x - lastX
                         lastX = x
+                        val wrap = if (isLeft) traveled > 48f else traveled < -48f
                         if (abs(traveled) > 48f) {
-                            if (isLeftEdge && traveled > 0f) {
-                                onOpenDrawer()
-                            } else {
-                                val direction = when {
-                                    traveled > 0f -> -1 // свайп вправо - назад
-                                    else -> 1           // свайп влево - следующая
-                                }
-                                val target = (currentPage() + direction).coerceIn(0, pageCount() - 1)
-                                onNavigate(target)
-                            }
+                            if (wrap) onWrap()
                             settled = true
                         }
                         if (change.changedToUp()) {

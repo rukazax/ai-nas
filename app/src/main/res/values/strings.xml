@@ -82,4 +82,39 @@
     <string name="update_checking">Проверяем обновления…</string>
     <string name="update_none">У вас последняя версия</string>
     <string name="update_download_failed">Не удалось загрузить обновление</string>
+
+    <!-- Файл-менеджер v1.2: телефон + галерея -->
+    <string name="source_phone">Телефон</string>
+    <string name="files_gallery_toggle">Галерея</string>
+    <string name="menu_upload_to_nas">На NAS (в /inbox)</string>
+    <string name="gallery_scanning">Ищем фото и видео…</string>
+    <string name="gallery_empty">Фото и видео не найдены</string>
+
+    <!-- Настройки -->
+    <string name="settings_title">Настройки</string>
+    <string name="settings_account">Аккаунт</string>
+    <string name="settings_server">Сервер</string>
+    <string name="settings_public_host">Публичный домен (пусто = автоматически)</string>
+    <string name="settings_home_host">Домашний адрес NAS (SFTP/SMB)</string>
+    <string name="settings_save">Сохранить</string>
+    <string name="settings_photo_sync">Автозагрузка фото</string>
+    <string name="settings_photo_enabled">Выгружать фото на NAS</string>
+    <string name="settings_photo_wifi">Только по Wi-Fi</string>
+    <string name="settings_photo_last">Последняя выгрузка:</string>
+    <string name="settings_sync_now">Синхронизировать сейчас</string>
+    <string name="settings_folder_sync">Синхронизация папок (телефон ↔ NAS)</string>
+    <string name="settings_folder_enabled">Синхронизировать пары папок</string>
+    <string name="settings_folder_hint">Пара: папка на телефоне ↔ папка на NAS. Двусторонний режим докачивает новые файлы NAS на телефон.</string>
+    <string name="settings_folder_last">Последняя сверка:</string>
+    <string name="settings_folder_add">Добавить пару</string>
+    <string name="settings_folder_add_title">Новая пара папок</string>
+    <string name="settings_folder_pick_local">Папка на телефоне:</string>
+    <string name="settings_folder_remote">Папка на NAS</string>
+    <string name="settings_folder_two_way">Двусторонняя синхронизация</string>
+    <string name="settings_theme">Оформление</string>
+    <string name="theme_system">Системная</string>
+    <string name="theme_light">Светлая</string>
+    <string name="theme_dark">Тёмная</string>
+    <string name="settings_updates">Обновления</string>
+    <string name="settings_version">Версия:</string>
 </resources>

@@ -333,9 +333,10 @@ internal fun DetailActions(
     onOpen: () -> Unit,
     onSave: () -> Unit,
     onSend: () -> Unit,
-    onRename: () -> Unit,
+    onRename: (() -> Unit)?,
     onDelete: () -> Unit,
-    onFavoriteToggle: () -> Unit,
+    onFavoriteToggle: (() -> Unit)?,
+    onUploadToNas: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
     Column(
@@ -363,9 +364,11 @@ internal fun DetailActions(
         if (progress != null) {
             Text(text = progress, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
         }
-        TextButton(onClick = onFavoriteToggle) {
-            Icon(if (favorite) Icons.Filled.Star else Icons.Filled.StarBorder, contentDescription = null)
-            Text(if (favorite) stringResource(R.string.menu_remove_favorite) else stringResource(R.string.menu_add_favorite))
+        if (onFavoriteToggle != null) {
+            TextButton(onClick = onFavoriteToggle) {
+                Icon(if (favorite) Icons.Filled.Star else Icons.Filled.StarBorder, contentDescription = null)
+                Text(if (favorite) stringResource(R.string.menu_remove_favorite) else stringResource(R.string.menu_add_favorite))
+            }
         }
         if (!entry.isDir) {
             TextButton(onClick = onOpen) {
@@ -377,9 +380,16 @@ internal fun DetailActions(
             TextButton(onClick = onSend) {
                 Text(stringResource(R.string.menu_send))
             }
+            if (onUploadToNas != null) {
+                TextButton(onClick = onUploadToNas) {
+                    Text(stringResource(R.string.menu_upload_to_nas))
+                }
+            }
         }
-        TextButton(onClick = onRename) {
-            Text(stringResource(R.string.menu_rename))
+        if (onRename != null) {
+            TextButton(onClick = onRename) {
+                Text(stringResource(R.string.menu_rename))
+            }
         }
         TextButton(onClick = onDelete) {
             Icon(

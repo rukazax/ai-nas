@@ -34,23 +34,40 @@ data class AuthState(
     val pass: String,
     val basic: String,
     val dshToken: String? = null,
+    /** Локальный адрес NAS в домашней сети — для SFTP/SMB, когда host публичный. */
+    val homeHost: String = "192.168.88.35",
 ) {
     fun userLine(): String = user + "@" + host
 
-    /** Публичный домен для маршрутов, у которых нет локального аналога (DSH, noVNC). */
-    fun publicHost(): String =
-        if (NasEndpoints.isLocalHost(host)) DEFAULT_PUBLIC_HOST else host
+    /** Хосты для SFTP: публичный + домашний (файловый слой живёт на NAS, не на VPS). */
+    fun sftpHosts(): List<String> =
+        if (NasEndpoints.isLocalHost(host)) listOf(host)
+        else listOf(host, homeHost).distinct()
+
+    /** Для SMB берём сразу домашний адрес: порт 445 наружу не отдаётся. */
+    fun smbHost(): String =
+        if (NasEndpoints.isLocalHost(host)) host else homeHost
+
+    /** Публичный домен для маршрутов, у которых нет локального аналога (DSH, noVNC).
+     *  [override] — значение из настроек (пусто = автоматически). */
+    fun publicHost(override: String? = null): String {
+        val custom = override?.trim().orEmpty()
+        if (custom.isNotEmpty()) return custom
+        return if (NasEndpoints.isLocalHost(host)) DEFAULT_PUBLIC_HOST else host
+    }
 
     /** Страница 0: дашборд NAS (локально — :8890, из интернета — /info/). */
     fun dashboardUrl(): String =
         if (NasEndpoints.isLocalHost(host)) "http://" + host + ":8890/"
         else "https://" + host + "/info/"
 
-    /** Страница 1: noVNC-рабочий стол сервера. */
-    fun desktopUrl(): String = "https://" + publicHost() + "/ubuntu/"
+    /** Страница «ubuntu»: noVNC-рабочий стол сервера. */
+    fun desktopUrl(publicHostOverride: String? = null): String =
+        "https://" + publicHost(publicHostOverride) + "/ubuntu/"
 
-    /** Страница 2: DSH GUI. */
-    fun dshBaseUrl(): String = "https://" + publicHost() + "/dsh/"
+    /** Страница «DSH» без токена. */
+    fun dshBaseUrl(publicHostOverride: String? = null): String =
+        "https://" + publicHost(publicHostOverride) + "/dsh/"
 }
 
 /** Кандидаты подключения и проверка живого сервера. */
@@ -159,6 +176,7 @@ object AuthStore {
     private val KEY_PASS = stringPreferencesKey("auth/pass")
     private val KEY_BASIC = stringPreferencesKey("auth/basic")
     private val KEY_TOKEN = stringPreferencesKey("auth/token")
+    private val KEY_HOME_HOST = stringPreferencesKey("auth/home_host")
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -187,6 +205,7 @@ object AuthStore {
             pass = pass ?: "",
             basic = basic,
             dshToken = token?.takeIf { it.isNotBlank() },
+            homeHost = prefs[KEY_HOME_HOST]?.takeIf { it.isNotBlank() } ?: "192.168.88.35",
         )
     }
 
@@ -197,6 +216,14 @@ object AuthStore {
             prefs[KEY_PASS] = auth.pass
             prefs[KEY_BASIC] = auth.basic
             if (auth.dshToken != null) prefs[KEY_TOKEN] = auth.dshToken else prefs.remove(KEY_TOKEN)
+            if (auth.homeHost.isNotBlank()) prefs[KEY_HOME_HOST] = auth.homeHost
+        }
+    }
+
+    /** Домашний адрес NAS для файлового слоя (SFTP/SMB). */
+    suspend fun setHomeHost(context: Context, host: String) {
+        context.mainPrefsStore.edit { prefs ->
+            prefs[KEY_HOME_HOST] = host.trim()
         }
     }
 

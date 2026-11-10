@@ -1,133 +1,197 @@
 package ru.ainas.app.ui
 
-import android.content.Intent
-import android.net.Uri
+import android.annotation.SuppressLint
 import android.webkit.CookieManager
 import android.webkit.HttpAuthHandler
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.browser.customtabs.CustomTabsIntent
-import ru.ainas.app.R
 import ru.ainas.app.auth.AuthState
+import ru.ainas.app.auth.DshPair
 
-/** Универсальный WebView-экран (дашборд NAS / noVNC-рабочий стол / DSH).
- *  Если сервер запрашивает HTTP Basic (nginx auth_basic на /info/) —
- *  автоматически отвечаем учётными данными сессии. */
-@Composable
-fun NasWebView(url: String, auth: AuthState? = null, modifier: Modifier = Modifier) {
-    AndroidView(
-        modifier = modifier.fillMaxSize(),
-        factory = { ctx ->
-            WebView(ctx).apply {
-                settings.javaScriptEnabled = true
-                settings.domStorageEnabled = true
-                settings.loadWithOverviewMode = true
-                settings.useWideViewPort = true
-                webViewClient = object : WebViewClient() {
-                    override fun onReceivedHttpAuthRequest(
-                        view: WebView,
-                        handler: HttpAuthHandler,
-                        host: String,
-                        realm: String,
-                    ) {
-                        val a = auth
-                        if (a != null && a.user.isNotBlank()) {
-                            handler.proceed(a.user, a.pass)
-                        } else {
-                            handler.cancel()
-                        }
-                    }
-                }
-                val cookies = CookieManager.getInstance()
-                cookies.setAcceptCookie(true)
-                cookies.setAcceptThirdPartyCookies(this, true)
-                loadUrl(url)
-            }
-        },
-        update = { view ->
-            if (view.url == null) view.loadUrl(url)
-        },
-    )
-}
+/**
+ * Пул WebView по ключу страницы: инстансы переживают смену страниц пейджера
+ * (без перезагрузки при свайпах) и ставятся на паузу, когда страница не видна.
+ */
+private val webViewPool = LinkedHashMap<String, WebView>()
 
-/** Страница 0: дашборд NAS — локально :8890, из интернета /info/ (выбирает AuthState). */
-@Composable
-fun DashboardScreen(auth: AuthState) {
-    NasWebView(url = auth.dashboardUrl(), auth = auth)
-}
+/** Тихий рестарт DSH-сессии не чаще, чем раз в 30 секунд. */
+private var lastDshRefreshMs = 0L
 
-/** Страница 1: noVNC/Guacamole-десктоп сервера через браузер-канал. */
-@Composable
-fun DesktopScreen(auth: AuthState) {
-    NasWebView(url = auth.desktopUrl(), auth = auth)
-}
+@SuppressLint("SetJavaScriptEnabled")
+private fun createWebView(
+    context: android.content.Context,
+    pageKey: String,
+    initialUrl: String,
+    auth: AuthState,
+    onSessionLost: () -> Unit,
+): WebView = WebView(context).apply {
+    settings.javaScriptEnabled = true
+    settings.domStorageEnabled = true
+    settings.loadWithOverviewMode = true
+    settings.useWideViewPort = true
+    settings.cacheMode = WebSettings.LOAD_DEFAULT
+    settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+    settings.mediaPlaybackRequiresUserGesture = false
+    settings.loadsImagesAutomatically = true
+    webViewClient = object : WebViewClient() {
+        override fun onPageFinished(view: WebView, url: String?) {
+            android.util.Log.i("AiNasWeb", "finished: " + url)
+        }
 
-/** Страница 2: DSH. При отсутствии cookie — кнопка сопряжения через Chrome Custom Tabs. */
-@Composable
-fun DshScreen(auth: AuthState) {
-    val context = LocalContext.current
-    var pairPrompt by remember { mutableStateOf(hasDshCookie(auth)) }
+        override fun onReceivedError(view: WebView, req: android.webkit.WebResourceRequest, err: android.webkit.WebResourceError) {
+            android.util.Log.w("AiNasWeb", "error: " + req.url + " " + err.description)
+        }
 
-    if (!pairPrompt) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .padding(top = 160.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+        override fun onReceivedHttpAuthRequest(
+            view: WebView,
+            handler: HttpAuthHandler,
+            host: String,
+            realm: String,
         ) {
-            Box(modifier = Modifier.fillMaxHeight(0.45f), contentAlignment = Alignment.BottomCenter) {
-                Text(
-                    text = stringResource(R.string.dsh_need_pair),
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
-            }
-            TextButton(onClick = { openDshPair(context, auth) }) {
-                Text(text = stringResource(R.string.dsh_login_button), color = Color.White)
-            }
-            TextButton(onClick = { pairPrompt = hasDshCookie(auth) }) {
-                Text(text = stringResource(R.string.dsh_refresh))
+            android.util.Log.i("AiNasWeb", "httpAuth: " + host)
+            if (auth.user.isNotBlank()) handler.proceed(auth.user, auth.pass) else handler.cancel()
+        }
+
+        override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
+            super.doUpdateVisitedHistory(view, url, isReload)
+            val u = url ?: return
+            val lostSession = u.contains("/dsh/pair") || u.contains("/dsh/login") ||
+                (pageKey == "dsh" && u.endsWith("/dsh/") && !u.contains("token="))
+            if (pageKey == "dsh" && lostSession) {
+                val now = System.currentTimeMillis()
+                if (now - lastDshRefreshMs > 30_000) {
+                    lastDshRefreshMs = now
+                    onSessionLost()
+                }
             }
         }
-    } else {
-        NasWebView(url = auth.dshBaseUrl(), auth = auth)
+    }
+    val cookies = CookieManager.getInstance()
+    cookies.setAcceptCookie(true)
+    cookies.setAcceptThirdPartyCookies(this, true)
+    android.util.Log.i("AiNasWeb", "create " + pageKey + " -> " + initialUrl)
+    loadUrl(initialUrl)
+}
+
+/**
+ * WebView-страница: пул по [pageKey], авто-basic-auth, пауза вне экрана.
+ * [onSessionLost] — сайт вернул на логин (токен DSH истёк): просим свежий URL.
+ */
+@Composable
+fun NasWebView(
+    pageKey: String,
+    url: String,
+    auth: AuthState,
+    isPageVisible: Boolean = true,
+    onSessionLost: () -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val view = remember(pageKey) {
+        webViewPool.getOrPut(pageKey) {
+            createWebView(context, pageKey, url, auth, onSessionLost)
+        }
+    }
+    AndroidView(
+        modifier = modifier.fillMaxSize(),
+        factory = {
+            (view.parent as? android.view.ViewGroup)?.removeView(view)
+            view
+        },
+        update = { wv ->
+            if (isPageVisible) wv.onResume() else wv.onPause()
+        },
+    )
+    DisposableEffect(pageKey) {
+        onDispose { view.onPause() }
     }
 }
 
-private fun hasDshCookie(auth: AuthState): Boolean =
-    CookieManager.getInstance().getCookie("https://" + auth.publicHost()) == null
+/** Страница «Дашборд»: локально :8890, из интернета /info/. */
+@Composable
+fun DashboardScreen(
+    auth: AuthState,
+    isPageVisible: Boolean,
+) {
+    NasWebView(
+        pageKey = "dashboard",
+        url = auth.dashboardUrl(),
+        auth = auth,
+        isPageVisible = isPageVisible,
+    )
+}
 
-private fun openDshPair(context: android.content.Context, auth: AuthState) {
-    val target = Uri.parse("https://" + auth.publicHost() + "/dsh/pair")
-    try {
-        val customTabs = CustomTabsIntent.Builder().build()
-        customTabs.launchUrl(context, target)
-    } catch (_: Exception) {
-        // Chrome Custom Tabs недоступен — обычный браузер
-        try {
-            context.startActivity(Intent(Intent.ACTION_VIEW, target))
-        } catch (_: Exception) {
+/** Страница «ubuntu» (noVNC): basic-auth отдаёт WebView автоматически. */
+@Composable
+fun DesktopScreen(
+    auth: AuthState,
+    isPageVisible: Boolean,
+    publicHostOverride: String?,
+) {
+    NasWebView(
+        pageKey = "desktop",
+        url = auth.desktopUrl(publicHostOverride),
+        auth = auth,
+        isPageVisible = isPageVisible,
+    )
+}
+
+/**
+ * Страница «DSH»: при входе и при каждой потере сессии получаем свежий
+ * pair-токен (GET /dsh/pair с basic-auth → 302 на /dsh/?token=…) и грузим его.
+ */
+@Composable
+fun DshScreen(
+    auth: AuthState,
+    isPageVisible: Boolean,
+    publicHostOverride: String?,
+) {
+    var url by rememberSaveable(auth.basic, publicHostOverride) { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(auth.basic, publicHostOverride) {
+        val u: String? = url
+        if (u == null || !u.contains("token=")) {
+            url = DshPair.fetchPairUrlSuspend(auth, publicHostOverride)
+                ?: auth.dshBaseUrl(publicHostOverride)
         }
+    }
+
+    val currentUrl = url
+    if (currentUrl == null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+            contentAlignment = Alignment.Center,
+        ) { CircularProgressIndicator() }
+    } else {
+        NasWebView(
+            pageKey = "dsh",
+            url = currentUrl,
+            auth = auth,
+            isPageVisible = isPageVisible,
+            onSessionLost = {
+                // потеря сессии: сбрасываем URL — LaunchedEffect получит свежий токен
+                if (currentUrl.contains("token=")) url = null
+            },
+        )
     }
 }

@@ -22,6 +22,7 @@ import androidx.work.WorkerParameters
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import ru.ainas.app.settings.SettingsStore
 import java.util.Calendar
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -38,15 +39,15 @@ object PhotoSync {
     private val KEY_LAST_SYNC = longPreferencesKey("photo/last_sync")
 
     /** Периодическая выгрузка не реже, чем раз в 15 минут (минимум WorkManager). */
-    fun schedulePeriodic(context: Context) {
+    fun schedulePeriodic(context: Context, wifiOnly: Boolean = true) {
         val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.UNMETERED)
+            .setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
             .build()
         val request = PeriodicWorkRequestBuilder<PhotoSyncWorker>(15L, TimeUnit.MINUTES)
             .setConstraints(constraints)
             .build()
         WorkManager.getInstance(context)
-            .enqueueUniquePeriodicWork(UNIQUE_PERIODIC, ExistingPeriodicWorkPolicy.KEEP, request)
+            .enqueueUniquePeriodicWork(UNIQUE_PERIODIC, ExistingPeriodicWorkPolicy.UPDATE, request)
     }
 
     /** Моментальная очередь после ContentObserver.onChange. */
@@ -77,6 +78,8 @@ class PhotoSyncWorker(
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+        val settings = SettingsStore.current(applicationContext)
+        if (!settings.photoSyncEnabled) return@withContext Result.success()
         val auth = AuthStore.current(applicationContext) ?: return@withContext Result.success()
         val resolver = applicationContext.contentResolver
         val last = PhotoSync.lastSync(applicationContext)
@@ -117,7 +120,10 @@ class PhotoSyncWorker(
             return@withContext Result.success()
         }
 
-        val sftp = SftpProvider(auth.host, SftpProvider.DEFAULT_PORT, auth.user, auth.pass)
+        val sftp = SftpProvider(
+            auth.host, SftpProvider.DEFAULT_PORT, auth.user, auth.pass,
+            altHost = auth.homeHost.takeIf { !ru.ainas.app.auth.NasEndpoints.isLocalHost(auth.host) },
+        )
         try {
             val device = deviceName(applicationContext)
             for ((uri, ts) in candidates) {

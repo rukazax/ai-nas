@@ -13,8 +13,8 @@ android {
         applicationId = "ru.ai.nas"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.2.0"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -89,7 +89,8 @@ dependencies {
     implementation("org.codelibs:jcifs:2.1.7") // jcifs-ng: SMB2/3 (официальная координата Maven Central)
     implementation("com.github.lookfirst:sardine:5.10") // WebDAV
     implementation("com.hierynomus:sshj:0.38.0") // SSSH/SFTP
-    implementation("org.bouncycastle:bcpkix-jdk18on:1.75") // провайдер BC для sshj
+    implementation("org.bouncycastle:bcprov-jdk18on:1.78.1") // полный BC: X25519 и др. для sshj
+    implementation("org.bouncycastle:bcpkix-jdk18on:1.78.1") // провайдер BC для sshj
 
     // --- Картинки ---
     implementation("io.coil-kt:coil-compose:2.7.0")

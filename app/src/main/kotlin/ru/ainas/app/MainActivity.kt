@@ -19,9 +19,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContent {
-            val windowSize = calculateWindowSizeClass(this)
             AiNasTheme {
-                AppRoot(widthSizeClass = windowSize.widthSizeClass)
+                AppRoot()
             }
         }
     }

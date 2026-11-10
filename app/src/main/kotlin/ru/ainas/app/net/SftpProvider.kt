@@ -25,7 +25,12 @@ class SftpProvider(
     private val port: Int = DEFAULT_PORT,
     private val user: String,
     private val password: String,
+    /** Резервный адрес (домашний IP), когда основной хост не отвечает по SFTP. */
+    private val altHost: String? = null,
 ) : Storage {
+
+    @Volatile
+    private var activeHost: String = host
 
     @Volatile
     private var ssh: SSHClient? = null
@@ -33,9 +38,10 @@ class SftpProvider(
     @Volatile
     private var sftp: SFTPClient? = null
 
-    private suspend fun <T> useSession(block: (SFTPClient) -> T): T {
+    private suspend fun <T> useSession(block: (SFTPClient) -> T): T = withContext(Dispatchers.IO) {
+        // ВАЖНО: любые сетевые операции sshj — только вне главного потока
         val first = ensure()
-        return try {
+        return@withContext try {
             block(first)
         } catch (e: Exception) {
             // обрыв транспорта -> попытка с чистого соединения
@@ -51,21 +57,32 @@ class SftpProvider(
             return@withContext current
         }
         Security.addProvider(BouncyCastleProvider())
-        val fresh = SSHClient()
-        fresh.addHostKeyVerifier(PromiscuousVerifier())
-        fresh.connect(host, port)
-        fresh.authPassword(user, password)
-        val channel = fresh.newSFTPClient()
-        ssh = fresh
-        sftp = channel
-        channel
+        var lastError: Exception? = null
+        for (candidate in listOf(host, altHost).filterNotNull().distinct()) {
+            try {
+                val fresh = SSHClient()
+                fresh.addHostKeyVerifier(PromiscuousVerifier())
+                fresh.timeout = 15000          // SO_TIMEOUT: операции не висят вечно
+                fresh.connectTimeout = 10000
+                fresh.connect(candidate, port)
+                fresh.authPassword(user, password)
+                val channel = fresh.newSFTPClient()
+                activeHost = candidate
+                ssh = fresh
+                sftp = channel
+                return@withContext channel
+            } catch (e: Exception) {
+                lastError = e
+            }
+        }
+        throw lastError ?: IOException("SFTP connect failed: " + host)
     }
 
     override suspend fun list(path: String): List<StorageListEntry> {
         val dir = if (path.isBlank() || path == "/") "/" else path
         val root = parentPath(dir)
         return useSession { c ->
-            val raw = c.ls(dir)
+            val raw = c.ls(dir).toList()
             val items = raw.map { info ->
                 val isDir = info.isDirectory
                 val size = if (isDir) 0L else info.attributes.size
